@@ -68,6 +68,7 @@ class MinutiaeEmbeddingHead(nn.Module):
             conv_bn_relu(896, 1024, 3, 1, 1),
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
+            nn.Dropout(p=0.2),
             nn.Linear(1024, 96)
         )
 
@@ -141,6 +142,7 @@ class DeepPrintNet(nn.Module):
         self.texture_fc = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
+            nn.Dropout(p=0.2),
             nn.Linear(1536, 96)
         )
 
