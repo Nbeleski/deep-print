@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import numpy as np
 from typing import Any
 from torch import Tensor
 
@@ -33,7 +34,11 @@ class LocalizationNetwork(nn.Module):
 
     def forward(self, x):
         x = F.interpolate(x, size=(128, 128), mode='bilinear')
-        return self.fc(self.conv(x))
+        # return self.fc(self.conv(x))
+        params = self.fc(self.conv(x))
+        params[:, 0:2] = torch.clamp(params[:, 0:2], -224, 224)   # translation
+        params[:, 2] = torch.clamp(params[:, 2], -np.pi/3, np.pi/3)  # rotation
+        return params
 
 
 class GridSampler(nn.Module):
