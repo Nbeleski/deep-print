@@ -5,101 +5,15 @@ import torch.nn.functional as F
 from typing import Any
 from torch import Tensor
 
+from .inception_v4 import InceptionV4Stem, InceptionA
+from .inception_v4 import InceptionB, InceptionC, ReductionA, ReductionB
+
 def conv_bn_relu(in_channels, out_channels, kernel_size, stride=1, padding=0):
     return nn.Sequential(
         nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
         nn.BatchNorm2d(out_channels),
         nn.ReLU(inplace=True)
     )
-
-class BasicConv2d(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, **kwargs: Any) -> None:
-        super(BasicConv2d, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
-        self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
-        self.relu = nn.ReLU(True)
-
-    def forward(self, x: Tensor) -> Tensor:
-        out = self.conv(x)
-        out = self.bn(out)
-        out = self.relu(out)
-
-        return out
-
-class InceptionV4Stem(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-    ) -> None:
-        super(InceptionV4Stem, self).__init__()
-        self.conv2d_1a_3x3 = BasicConv2d(in_channels, 32, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0))
-
-        self.conv2d_2a_3x3 = BasicConv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0))
-        self.conv2d_2b_3x3 = BasicConv2d(32, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-
-        self.mixed_3a_branch_0 = nn.MaxPool2d((3, 3), (2, 2))
-        self.mixed_3a_branch_1 = BasicConv2d(64, 96, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0))
-
-        self.mixed_4a_branch_0 = nn.Sequential(
-            BasicConv2d(160, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(64, 96, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0)),
-        )
-        self.mixed_4a_branch_1 = nn.Sequential(
-            BasicConv2d(160, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(64, 64, kernel_size=(1, 7), stride=(1, 1), padding=(0, 3)),
-            BasicConv2d(64, 64, kernel_size=(7, 1), stride=(1, 1), padding=(3, 0)),
-            BasicConv2d(64, 96, kernel_size=(3, 3), stride=(1, 1), padding=(0, 0))
-        )
-
-        self.mixed_5a_branch_0 = BasicConv2d(192, 192, kernel_size=(3, 3), stride=(2, 2), padding=(0, 0))
-        self.mixed_5a_branch_1 = nn.MaxPool2d((3, 3), (2, 2))
-
-    def forward(self, x):
-        x = self.conv2d_1a_3x3(x) # 149 x 149 x 32
-        x = self.conv2d_2a_3x3(x) # 147 x 147 x 32
-        x = self.conv2d_2b_3x3(x) # 147 x 147 x 64
-        x0 = self.mixed_3a_branch_0(x)
-        x1 = self.mixed_3a_branch_1(x)
-        x = torch.cat((x0, x1), dim=1) # 73 x 73 x 160
-        x0 = self.mixed_4a_branch_0(x)
-        x1 = self.mixed_4a_branch_1(x)
-        x = torch.cat((x0, x1), dim=1) # 71 x 71 x 192
-        x0 = self.mixed_5a_branch_0(x)
-        x1 = self.mixed_5a_branch_1(x)
-        x = torch.cat((x0, x1), dim=1) # 35 x 35 x 384
-        return x
-
-class InceptionA(nn.Module):
-    def __init__(
-            self,
-            in_channels: int,
-    ) -> None:
-        super(InceptionA, self).__init__()
-        self.branch_0 = BasicConv2d(in_channels, 96, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        self.branch_1 = nn.Sequential(
-            BasicConv2d(in_channels, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(64, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-        )
-        self.branch_2 = nn.Sequential(
-            BasicConv2d(in_channels, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0)),
-            BasicConv2d(64, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-            BasicConv2d(96, 96, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
-        )
-        self.brance_3 = nn.Sequential(
-            nn.AvgPool2d((3, 3), (1, 1), (1, 1), count_include_pad=False),
-            BasicConv2d(384, 96, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
-        )
-
-    def forward(self, x):
-        branch_0 = self.branch_0(x)
-        branch_1 = self.branch_1(x)
-        branch_2 = self.branch_2(x)
-        brance_3 = self.brance_3(x)
-
-        out = torch.cat([branch_0, branch_1, branch_2, brance_3], 1)
-
-        return out
-
 
 class LocalizationNetwork(nn.Module):
     def __init__(self):
@@ -185,7 +99,7 @@ class MinutiaeMapHead(nn.Module):
 
 
 class DeepPrintNet(nn.Module):
-    def __init__(self):
+    def __init__(self, num_classes):
         super().__init__()
         self.localization = LocalizationNetwork()
         self.sampler = GridSampler()
@@ -203,17 +117,36 @@ class DeepPrintNet(nn.Module):
         self.minutiae_embed = MinutiaeEmbeddingHead(384)
         self.minutiae_map = MinutiaeMapHead(384)
 
-        self.minutiae_stack = nn.Sequential(*[conv_bn_relu(384, 384, 3, 1, 1) for _ in range(6)])
-        self.texture_stack = nn.Sequential(
-            conv_bn_relu(384, 384, 3, 1, 1),
-            conv_bn_relu(384, 384, 3, 1, 1),
-            conv_bn_relu(384, 384, 3, 1, 1)
+        # T(x), but technically the rest of
+        # the inceptionV4
+        k: int = 192
+        l: int = 224
+        m: int = 256
+        n: int = 384
+        self.T = nn.Sequential(
+            ReductionA(384, k, l, m, n),
+            InceptionB(1024),
+            InceptionB(1024),
+            InceptionB(1024),
+            InceptionB(1024),
+            InceptionB(1024),
+            InceptionB(1024),
+            InceptionB(1024),
+            ReductionB(1024),
+            InceptionC(1536),
+            InceptionC(1536),
+            InceptionC(1536),
         )
+
         self.texture_fc = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
-            nn.Linear(384, 96)
+            nn.Linear(1536, 96)
         )
+
+        # logits for training only:
+        self.classifier1 = nn.Linear(96, num_classes)
+        self.classifier2 = nn.Linear(96, num_classes)
 
     def forward(self, x):
         align_params = self.localization(x)
@@ -229,17 +162,27 @@ class DeepPrintNet(nn.Module):
         d_x = self.minutiae_map(e_x)
         m_x = self.minutiae_embed(e_x)
 
-        # TODO: T(x) should be the rest of the
-        # inception V4 as far as I understand.
-        t_x = self.minutiae_stack(x)
-        t_feat = self.texture_stack(t_x)
-        t_embed = self.texture_fc(t_feat)
+        # Then the T(x) is the rest of the
+        # inception V4
+        t_x = self.T(x)
+        t_x = self.texture_fc(t_x)
 
-        embedding = F.normalize(torch.cat([m_x, t_embed], dim=1), dim=1)
+        embedding = F.normalize(torch.cat([m_x, t_x], dim=1), dim=1)
 
+        logits1 = self.classifier1(m_x)   # [batch, num_classes]
+        logits2 = self.classifier2(t_x)   # [batch, num_classes]
+
+        # We will be outputting both R1, R2 and
+        # the logits for each, simply because
+        # these values will be used on the loss 
+        # calculation for training.
         return {
             'embedding': embedding,
             'minutiae_map': d_x,
             'alignment': align_params,
-            'aligned': aligned
+            'aligned': aligned,
+            'R1': m_x,
+            'R2': t_x,
+            'logits_r1': logits1,
+            'logits_r2': logits2
         }
