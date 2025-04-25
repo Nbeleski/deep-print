@@ -34,10 +34,12 @@ class LocalizationNetwork(nn.Module):
 
     def forward(self, x):
         x = F.interpolate(x, size=(128, 128), mode='bilinear')
-        # return self.fc(self.conv(x))
         params = self.fc(self.conv(x))
-        params[:, 0:2] = torch.clamp(params[:, 0:2], -224, 224)   # translation
-        params[:, 2] = torch.clamp(params[:, 2], -np.pi/3, np.pi/3)  # rotation
+        # Clamp everything out-of-place
+        # Split into translation and rotation, clamp separately, then concatenate
+        trans = torch.clamp(params[:, 0:2], -224, 224)
+        rot = torch.clamp(params[:, 2:3], -np.pi/3, np.pi/3)  # keep dimension
+        params = torch.cat([trans, rot], dim=1)
         return params
 
 
@@ -190,6 +192,6 @@ class DeepPrintNet(nn.Module):
             'aligned': aligned,
             'R1': m_x,
             'R2': t_x,
-            'logits_r1': logits1,
-            'logits_r2': logits2
+            'logits1': logits1,
+            'logits2': logits2
         }

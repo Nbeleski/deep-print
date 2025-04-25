@@ -92,77 +92,77 @@ class Template:
             total_extension_length = (buffer[pos] << 8) | buffer[pos + 1]
             pos += 2
         
-            # Loop through each extension in the block.
-            while pos < len(buffer):
-                # Read the extension type (2 bytes, big-endian)
-                extension_type = (buffer[pos] << 8) | buffer[pos + 1]
-                pos += 2
+            # # Loop through each extension in the block.
+            # while pos < len(buffer):
+            #     # Read the extension type (2 bytes, big-endian)
+            #     extension_type = (buffer[pos] << 8) | buffer[pos + 1]
+            #     pos += 2
         
-                # Read the length of the current extension (2 bytes, big-endian)
-                current_extension_length = (buffer[pos] << 8) | buffer[pos + 1]
-                pos += 2
+            #     # Read the length of the current extension (2 bytes, big-endian)
+            #     current_extension_length = (buffer[pos] << 8) | buffer[pos + 1]
+            #     pos += 2
         
-                if extension_type == 1:
-                    # Extension type 1 contains ridge information (not implemented)
-                    pos += current_extension_length - 4
+            #     if extension_type == 1:
+            #         # Extension type 1 contains ridge information (not implemented)
+            #         pos += current_extension_length - 4
         
-                elif extension_type == 2:
-                    # Extension type 2: core and delta information.
-                    if current_extension_length < 2:
-                        raise ValueError("Erro no tamanho dos campos de extensão")
+            #     elif extension_type == 2:
+            #         # Extension type 2: core and delta information.
+            #         if current_extension_length < 2:
+            #             raise ValueError("Erro no tamanho dos campos de extensão")
         
-                    # Process core information.
-                    # The first byte indicates (a) whether cores include an angle and (b) the number of cores.
-                    core_byte = buffer[pos]
-                    core_has_angle = bool(core_byte & 0b01000000)
-                    core_num = core_byte & 0b00001111
-                    pos += 1
+            #         # Process core information.
+            #         # The first byte indicates (a) whether cores include an angle and (b) the number of cores.
+            #         core_byte = buffer[pos]
+            #         core_has_angle = bool(core_byte & 0b01000000)
+            #         core_num = core_byte & 0b00001111
+            #         pos += 1
         
-                    # Initialize the list to store core data.
-                    self.cores = []
-                    for _ in range(core_num):
-                        # Each core's x-coordinate is encoded in two parts:
-                        #   high 6 bits in buffer[pos] and low 8 bits in buffer[pos+1]
-                        x = ((buffer[pos] & 0x3F) << 8) | buffer[pos + 1]
-                        # Similarly for y:
-                        y = ((buffer[pos + 2] & 0x3F) << 8) | buffer[pos + 3]
-                        angle = 0
-                        if core_has_angle:
-                            angle = buffer[pos + 4]
-                            pos += 5
-                        else:
-                            pos += 4
-                        self.cores.append(Core(x, y, angle))
+            #         # Initialize the list to store core data.
+            #         self.cores = []
+            #         for _ in range(core_num):
+            #             # Each core's x-coordinate is encoded in two parts:
+            #             #   high 6 bits in buffer[pos] and low 8 bits in buffer[pos+1]
+            #             x = ((buffer[pos] & 0x3F) << 8) | buffer[pos + 1]
+            #             # Similarly for y:
+            #             y = ((buffer[pos + 2] & 0x3F) << 8) | buffer[pos + 3]
+            #             angle = 0
+            #             if core_has_angle:
+            #                 angle = buffer[pos + 4]
+            #                 pos += 5
+            #             else:
+            #                 pos += 4
+            #             self.cores.append(Core(x, y, angle))
         
-                    # Process delta information.
-                    # The next byte encodes if deltas include angles and how many deltas there are.
-                    delta_byte = buffer[pos]
-                    delta_has_angle = bool(delta_byte & 0b01000000)
-                    delta_num = delta_byte & 0b00001111
-                    pos += 1
+            #         # Process delta information.
+            #         # The next byte encodes if deltas include angles and how many deltas there are.
+            #         delta_byte = buffer[pos]
+            #         delta_has_angle = bool(delta_byte & 0b01000000)
+            #         delta_num = delta_byte & 0b00001111
+            #         pos += 1
         
-                    # Initialize the list to store delta data.
-                    self.deltas = []
-                    for _ in range(delta_num):
-                        x = ((buffer[pos] & 0x3F) << 8) | buffer[pos + 1]
-                        y = ((buffer[pos + 2] & 0x3F) << 8) | buffer[pos + 3]
-                        if delta_has_angle:
-                            ang1 = buffer[pos + 4]
-                            ang2 = buffer[pos + 5]
-                            ang3 = buffer[pos + 6]
-                            pos += 7
-                        else:
-                            ang1 = ang2 = ang3 = 0
-                            pos += 4
-                        self.deltas.append(Delta(x, y, ang1, ang2, ang3))
+            #         # Initialize the list to store delta data.
+            #         self.deltas = []
+            #         for _ in range(delta_num):
+            #             x = ((buffer[pos] & 0x3F) << 8) | buffer[pos + 1]
+            #             y = ((buffer[pos + 2] & 0x3F) << 8) | buffer[pos + 3]
+            #             if delta_has_angle:
+            #                 ang1 = buffer[pos + 4]
+            #                 ang2 = buffer[pos + 5]
+            #                 ang3 = buffer[pos + 6]
+            #                 pos += 7
+            #             else:
+            #                 ang1 = ang2 = ang3 = 0
+            #                 pos += 4
+            #             self.deltas.append(Delta(x, y, ang1, ang2, ang3))
         
-                elif extension_type == 3:
-                    # Extension type 3 contains proprietary group information.
-                    pos += current_extension_length - 4
+            #     elif extension_type == 3:
+            #         # Extension type 3 contains proprietary group information.
+            #         pos += current_extension_length - 4
         
-                else:
-                    # For any other (unknown) extension types, skip the extension data.
-                    pos += current_extension_length - 4
+            #     else:
+            #         # For any other (unknown) extension types, skip the extension data.
+            #         pos += current_extension_length - 4
 
     def draw_minutiae(self, image_width=512, image_height=512, radius=3, color=(255, 0, 0), thickness=2):
         # Create a blank image
