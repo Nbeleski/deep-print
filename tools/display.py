@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
-import math
+import math, os
 from scipy.ndimage import maximum_filter
 
 def extract_minutiae_from_map(H, threshold=0.5, nms_dist=8):
@@ -114,3 +114,45 @@ def sanity_check_deepprint_sample(dataset, idx=None, threshold=0.5, nms_dist=8):
     plt.title(f"Augmented sample idx={idx}, label={label}, #minutiae={len(minutiae)}")
     plt.axis('off')
     plt.show()
+
+def save_concat_aligned_by_class(aligned_imgs, labels, outdir, batch_idx):
+    """
+    Save concatenated images of all aligned samples for each class in the batch.
+
+    Args:
+        aligned_imgs: (B, H, W) or (B, 1, H, W) numpy or torch array, aligned images
+        labels: (B,) torch tensor or numpy array, class labels
+        outdir: str, directory to save images
+        batch_idx: int, current batch index (for unique filenames)
+    """
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    # Ensure numpy (convert from torch if needed)
+    if hasattr(aligned_imgs, "detach"):
+        aligned_imgs = aligned_imgs.detach().cpu().numpy()
+    if hasattr(labels, "detach"):
+        labels = labels.detach().cpu().numpy()
+    # Remove channel dim if present
+    if aligned_imgs.ndim == 4 and aligned_imgs.shape[1] == 1:
+        aligned_imgs = aligned_imgs[:, 0, :, :]
+    elif aligned_imgs.ndim == 4 and aligned_imgs.shape[-1] == 1:
+        aligned_imgs = aligned_imgs[..., 0]
+    # Normalize to uint8 [0,255] if not already
+    if aligned_imgs.max() <= 1.0:
+        aligned_imgs = (aligned_imgs * 255).astype(np.uint8)
+    else:
+        aligned_imgs = aligned_imgs.astype(np.uint8)
+
+    unique_labels = np.unique(labels)
+    for class_idx in unique_labels:
+        indices = np.where(labels == class_idx)[0]
+        if len(indices) == 0:
+            continue
+        # Stack aligned images horizontally for this class
+        imgs_to_concat = [aligned_imgs[i] for i in indices]
+        concat_img = np.concatenate(imgs_to_concat, axis=1)  # H, W1+W2+..., single channel
+        # Convert to BGR for saving if grayscale
+        if concat_img.ndim == 2:
+            concat_img = cv2.cvtColor(concat_img, cv2.COLOR_GRAY2BGR)
+        outpath = os.path.join(outdir, f"batch{batch_idx:04d}_class{class_idx}.png")
+        cv2.imwrite(outpath, concat_img)

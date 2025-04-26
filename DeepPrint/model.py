@@ -32,13 +32,18 @@ class LocalizationNetwork(nn.Module):
             nn.Linear(64, 3)
         )
 
+        # ---- Zero the final FC layer's bias (and optionally weights) ----
+        # self.fc[-1] is the nn.Linear(64, 3)
+        nn.init.zeros_(self.fc[-1].weight)
+        nn.init.zeros_(self.fc[-1].bias)
+
     def forward(self, x):
         x = F.interpolate(x, size=(128, 128), mode='bilinear')
         params = self.fc(self.conv(x))
         # Clamp everything out-of-place
         # Split into translation and rotation, clamp separately, then concatenate
         trans = torch.clamp(params[:, 0:2], -224, 224)
-        rot = torch.clamp(params[:, 2:3], -np.pi/3, np.pi/3)  # keep dimension
+        rot = torch.clamp(params[:, 2:3], -np.pi/4, np.pi/4)  # keep dimension
         params = torch.cat([trans, rot], dim=1)
         return params
 
@@ -88,23 +93,18 @@ class MinutiaeMapHead(nn.Module):
         super().__init__()
         self.net = nn.Sequential(
             nn.ConvTranspose2d(in_channels, 384, 3, stride=2, padding=1, output_padding=1),   # 35 → 70
-            conv_bn_relu(384, 128, 3, 1, 1),  # 70×70
+            conv_bn_relu(384, 128, 7, 1, 1),  # 70×70
             nn.ConvTranspose2d(128, 128, 3, stride=2, padding=1, output_padding=1),            # 70 → 140
-            conv_bn_relu(128, 64, 3, 1, 1),   # 140×140
-            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=0),              # 140 → 281 (crop later)
-            conv_bn_relu(32, 32, 3, 1, 1),
-            nn.Conv2d(32, 6, 1)               # Final 6 channels
+            conv_bn_relu(128, 32, 3, 1, 1),   # 140×140
+            nn.Conv2d(32, 6, 1)  
         )
 
     def forward(self, x):
         x = self.net(x)
-        # center crop to 192x192
-        H, W = x.shape[-2:]
-        top = (H - 192) // 2
-        left = (W - 192) // 2
-        return x[..., top:top+192, left:left+192]
-
-
+        start = (x.shape[-2] - 192) // 2
+        end = start + 192
+        x = x[..., start:end, start:end]
+        return x
 
 class DeepPrintNet(nn.Module):
     def __init__(self, num_classes):
