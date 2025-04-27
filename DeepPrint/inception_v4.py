@@ -7,9 +7,14 @@ from torch import Tensor
 
 class BasicConv2d(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, **kwargs: Any) -> None:
+        # super(BasicConv2d, self).__init__()
+        # self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
+        # self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
+        # self.relu = nn.ReLU(True)
+
         super(BasicConv2d, self).__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
-        self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
+        self.bn = nn.GroupNorm(num_groups=8, num_channels=out_channels)
         self.relu = nn.ReLU(True)
 
     def forward(self, x: Tensor) -> Tensor:

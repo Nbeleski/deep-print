@@ -11,10 +11,16 @@ from .inception_v4 import InceptionB, InceptionC, ReductionA, ReductionB
 
 def conv_bn_relu(in_channels, out_channels, kernel_size, stride=1, padding=0):
     return nn.Sequential(
+        # nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
+        # nn.BatchNorm2d(out_channels),
+        # nn.ReLU(inplace=True)
+
         nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
-        nn.BatchNorm2d(out_channels),
+        nn.GroupNorm(num_groups=8, num_channels=out_channels),
         nn.ReLU(inplace=True)
     )
+
+
 
 class LocalizationNetwork(nn.Module):
     def __init__(self):
