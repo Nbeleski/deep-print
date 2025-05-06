@@ -47,7 +47,7 @@ class LocalizationNetwork(nn.Module):
         x = self.conv(x)
         params = self.fc(x)
         trans = torch.clamp(params[:, 0:2], -224, 224)
-        rot = torch.clamp(params[:, 2:3], -np.pi/4, np.pi/4)
+        rot = torch.clamp(params[:, 2:3], -np.pi/6, np.pi/6)
         return torch.cat([trans, rot], dim=1)
 
 
