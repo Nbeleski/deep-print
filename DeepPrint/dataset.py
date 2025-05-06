@@ -78,75 +78,73 @@ def apply_affine_to_map(mmap_np, dx, dy, dt, img_shape=(448, 448)):
         transformed.squeeze(0).permute(1, 2, 0).numpy(), dt
     )
 
+def apply_affine_to_map_tensor(mmap_tensor, dx, dy, dt, img_shape=(448, 448)):
+    """
+    Batched affine transform on [B, 6, H, W] tensor, followed by channel-wise rotation.
+    dx, dy, dt must be shape [B]
+    """
+    B, C, H, W = mmap_tensor.shape
+    assert C == 6, "Expected 6 orientation bins"
+    device = mmap_tensor.device
+    ih, iw = img_shape
+
+    # Normalize translations
+    tx = dx / iw  # [B]
+    ty = dy / ih
+
+    cos_theta = torch.cos(dt)  # [B]
+    sin_theta = torch.sin(dt)
+
+    # Construct affine matrices for each batch element: [B, 2, 3]
+    zeros = torch.zeros_like(tx)
+    ones = torch.ones_like(tx)
+
+    affine = torch.stack([
+        torch.stack([cos_theta, -sin_theta, tx], dim=1),
+        torch.stack([sin_theta,  cos_theta, ty], dim=1)
+    ], dim=1)  # shape [B, 2, 3]
+
+    grid = F.affine_grid(affine, mmap_tensor.size(), align_corners=False)
+    transformed = F.grid_sample(mmap_tensor, grid, mode='nearest', align_corners=False)
+
+    # Rotate orientation channels
+    rotated = rotate_orientation_channels_torch(transformed, dt)
+    return rotated
+
 def rotate_orientation_channels_torch(mmap_tensor, delta_theta):
     """
     Rotates the orientation channels of a 6-channel minutiae map tensor (circular shift).
 
     Args:
-        mmap_tensor: torch.Tensor of shape [1, 6, H, W] (or [B, 6, H, W])
-        delta_theta: scalar float in radians (clockwise positive)
+        mmap_tensor: torch.Tensor of shape [B, 6, H, W]
+        delta_theta: tensor of shape [B], in radians (positive = clockwise)
 
     Returns:
         Rotated tensor, same shape [B, 6, H, W]
     """
     B, C, H, W = mmap_tensor.shape
     assert C == 6, "Expected 6 orientation bins"
+    device = mmap_tensor.device
 
-    # Compute fractional shift
-    shift = -6 * delta_theta / (2 * torch.pi)  # counter-clockwise
+    # shift = -6 * delta_theta / (2 * torch.pi)  # shape [B]
+    shift = 6 * delta_theta / (2 * torch.pi)  # match CCW spatial rotation
 
-    # DFT over orientation dimension (dim=1)
+    # DFT over channel dim (dim=1)
     fmap = torch.fft.fft(mmap_tensor, dim=1)
 
-    # Frequency indices (shape [C], from 0 to C-1)
-    freqs = torch.fft.fftfreq(C, device=mmap_tensor.device).view(1, C, 1, 1)
+    # Frequency indices (shape [6])
+    freqs = torch.fft.fftfreq(C, device=device)  # shape [6]
 
-    # Complex exponential phase shift
-    phase = torch.exp(-2j * torch.pi * freqs * shift)
+    # Create per-batch phase shift: [B, 6]
+    phase = torch.exp(-2j * torch.pi * freqs.unsqueeze(0) * shift.unsqueeze(1))  # [B, 6]
 
-    # Apply phase shift (broadcast over B, H, W)
-    fmap_shifted = fmap * phase
+    # Reshape to broadcast over H, W
+    phase = phase.view(B, C, 1, 1)  # [B, 6, 1, 1]
 
-    # Inverse FFT
+    fmap_shifted = fmap * phase  # [B, 6, H, W] * [B, 6, 1, 1]
+
     rotated = torch.fft.ifft(fmap_shifted, dim=1).real
-
     return rotated
-
-# def apply_affine_to_map_tensor(mmap_tensor, dx, dy, dt, img_shape=(448, 448)):
-#     """
-#     Applies affine transform (translation + rotation) to a 6-channel minutiae map tensor.
-
-#     Args:
-#         mmap_tensor: torch.Tensor of shape [1, 6, H, W]
-#         dx, dy: translation in image pixels (same scale as img_shape)
-#         dt: rotation in radians
-#         img_shape: shape of source image that the map aligns to (used to normalize dx, dy)
-
-#     Returns:
-#         Transformed map tensor, same shape [1, 6, H, W]
-#     """
-#     assert mmap_tensor.dim() == 4 and mmap_tensor.size(1) == 6, "Expected shape [1, 6, H, W]"
-#     device = mmap_tensor.device
-#     _, _, H, W = mmap_tensor.shape
-#     ih, iw = img_shape
-
-#     tx = dx / iw
-#     ty = dy / ih
-
-#     theta = torch.tensor(dt, device=device)
-#     cos_theta = torch.cos(theta)
-#     sin_theta = torch.sin(theta)
-
-#     affine = torch.tensor([[[cos_theta, -sin_theta, tx],
-#                             [sin_theta,  cos_theta, ty]]], dtype=torch.float, device=device)
-
-#     grid = F.affine_grid(affine, mmap_tensor.size(), align_corners=False)
-#     transformed = F.grid_sample(mmap_tensor, grid, mode='nearest', align_corners=False)
-
-#     # Rotate orientation channels
-#     rotated = rotate_orientation_channels_torch(transformed, dt)
-#     #rotated_tensor = rotated.permute(2, 0, 1).unsqueeze(0).to(device)
-#     return rotated
 
 def apply_affine_to_map_tensor(mmap_tensor, dx, dy, dt, img_shape=(448, 448)):
     """
