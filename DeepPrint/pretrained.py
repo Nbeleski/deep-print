@@ -23,9 +23,12 @@ def conv_bn_relu(in_channels, out_channels, kernel_size, stride=1, padding=0):
     )
 
 class LocalizationNetwork(nn.Module):
-    def __init__(self):
+    def __init__(self, input_size=(128, 128), max_rotation=np.pi/6):
         super().__init__()
-        self.down = nn.Upsample(size=(128, 128), mode='bilinear', align_corners=False)
+        self.input_size = input_size  # (H, W)
+        self.max_rotation = max_rotation
+
+        self.down = nn.Upsample(size=input_size, mode='bilinear', align_corners=False)
         self.conv = nn.Sequential(
             nn.Conv2d(1, 24, 5), nn.ReLU(), nn.MaxPool2d(2),
             nn.Conv2d(24, 32, 3), nn.ReLU(), nn.MaxPool2d(2),
@@ -33,23 +36,24 @@ class LocalizationNetwork(nn.Module):
             nn.Conv2d(48, 64, 3), nn.ReLU(), nn.MaxPool2d(2)
         )
         self.fc = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),   # output shape (B, 64, 1, 1)
-            nn.Flatten(),              # (B, 64)
+            nn.AdaptiveAvgPool2d(1),  # (B, 64, 1, 1)
+            nn.Flatten(),             # (B, 64)
             nn.Linear(64, 64),
             nn.ReLU(),
-            nn.Linear(64, 3)
+            nn.Linear(64, 3)          # raw tx, ty, theta logits
         )
-        nn.init.zeros_(self.fc[-1].weight)
-        nn.init.zeros_(self.fc[-1].bias)
 
     def forward(self, x):
         x = self.down(x)
         x = self.conv(x)
-        params = self.fc(x)
-        trans = torch.clamp(params[:, 0:2], -224, 224)
-        rot = torch.clamp(params[:, 2:3], -np.pi/6, np.pi/6)
-        return torch.cat([trans, rot], dim=1)
+        raw_params = self.fc(x)  # (B, 3)
 
+        # Scale with tanh
+        tx = torch.tanh(raw_params[:, 0]) * (self.input_size[1] / 2)  # W/2
+        ty = torch.tanh(raw_params[:, 1]) * (self.input_size[0] / 2)  # H/2
+        theta = torch.tanh(raw_params[:, 2]) * self.max_rotation      # ~±π/6
+
+        return torch.stack([tx, ty, theta], dim=1)  # (B, 3)
 
 class GridSampler(nn.Module):
     def forward(self, img, params):
