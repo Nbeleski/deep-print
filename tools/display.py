@@ -56,7 +56,7 @@ def extract_minutiae_from_map(H, threshold=0.5, nms_dist=8):
         selected.append((x, y, theta))
     return selected
 
-def draw_minutiae_on_image(img, minutiae, map_shape, img_shape, color=(0,0,255)):
+def draw_minutiae_on_image(img, minutiae, map_shape, img_shape, color=(255,0,0)):
     """
     Draws circles and orientation lines for each minutia.
     Args:
@@ -81,12 +81,12 @@ def draw_minutiae_on_image(img, minutiae, map_shape, img_shape, color=(0,0,255))
         ix = int(x * scale_x)
         iy = int(y * scale_y)
 
-        cv2.circle(img_vis, (ix, iy), 4, color, 1)
+        cv2.circle(img_vis, (ix, iy), 4, color, 2)
         # Direction line: add pi/2 so 0 points up
         angle = theta + math.pi/2
         dx = int(15 * math.sin(angle))
         dy = int(15 * math.cos(angle))
-        cv2.line(img_vis, (ix, iy), (ix + dx, iy + dy), color, 1)
+        cv2.line(img_vis, (ix, iy), (ix + dx, iy + dy), color, 2)
     return img_vis
 
 def sanity_check_deepprint_sample(dataset, idx=None, threshold=0.5, nms_dist=8):

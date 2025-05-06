@@ -8,9 +8,6 @@ import copy
 from typing import Any
 from torch import Tensor
 
-# Your heads stay the same as before
-from .inception_v4 import InceptionA  # If you want to keep your version for the Minutiae branch
-
 def conv_bn_relu(in_channels, out_channels, kernel_size, stride=1, padding=0):
     return nn.Sequential(
         # nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
