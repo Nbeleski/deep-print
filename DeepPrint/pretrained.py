@@ -25,6 +25,7 @@ def conv_bn_relu(in_channels, out_channels, kernel_size, stride=1, padding=0):
 class LocalizationNetwork(nn.Module):
     def __init__(self):
         super().__init__()
+        self.down = nn.Upsample(size=(128, 128), mode='bilinear', align_corners=False)
         self.conv = nn.Sequential(
             nn.Conv2d(1, 24, 5), nn.ReLU(), nn.MaxPool2d(2),
             nn.Conv2d(24, 32, 3), nn.ReLU(), nn.MaxPool2d(2),
@@ -32,26 +33,22 @@ class LocalizationNetwork(nn.Module):
             nn.Conv2d(48, 64, 3), nn.ReLU(), nn.MaxPool2d(2)
         )
         self.fc = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(64*6*6, 64),
+            nn.AdaptiveAvgPool2d(1),   # output shape (B, 64, 1, 1)
+            nn.Flatten(),              # (B, 64)
+            nn.Linear(64, 64),
             nn.ReLU(),
             nn.Linear(64, 3)
         )
-
-        # ---- Zero the final FC layer's bias (and optionally weights) ----
-        # self.fc[-1] is the nn.Linear(64, 3)
         nn.init.zeros_(self.fc[-1].weight)
         nn.init.zeros_(self.fc[-1].bias)
 
     def forward(self, x):
-        x = F.interpolate(x, size=(128, 128), mode='bilinear')
-        params = self.fc(self.conv(x))
-        # Clamp everything out-of-place
-        # Split into translation and rotation, clamp separately, then concatenate
+        x = self.down(x)
+        x = self.conv(x)
+        params = self.fc(x)
         trans = torch.clamp(params[:, 0:2], -224, 224)
-        rot = torch.clamp(params[:, 2:3], -np.pi/4, np.pi/4)  # keep dimension
-        params = torch.cat([trans, rot], dim=1)
-        return params
+        rot = torch.clamp(params[:, 2:3], -np.pi/4, np.pi/4)
+        return torch.cat([trans, rot], dim=1)
 
 
 class GridSampler(nn.Module):
