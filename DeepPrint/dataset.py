@@ -145,8 +145,8 @@ def apply_affine_to_map_tensor(mmap_tensor, dx, dy, dt, img_shape=(448, 448)):
 
     # Rotate orientation channels
     rotated = rotate_orientation_channels_torch(transformed, dt)
-    rotated_tensor = torch.from_numpy(rotated).permute(2, 0, 1).unsqueeze(0).to(device)
-    return rotated_tensor
+    #rotated_tensor = rotated.permute(2, 0, 1).unsqueeze(0).to(device)
+    return rotated
 
 class DeepPrintDataset(Dataset):
     def __init__(self, root, split='train', ids=None, color_jitter=True, affine_aug=True, id2label=None):
